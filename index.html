@@ -205,7 +205,7 @@
         }
         .modal-overlay.active .edit-panel { transform: translateY(0); }
 
-        /* Toast - High Offset */
+        /* Toast - High offset to ensure it is fully hidden */
         #toast {
             position: absolute;
             top: 60px;
@@ -347,14 +347,6 @@
                 </div>
                 <div class="add-icon">+</div>
             </div>
-
-            <div class="absolute bottom-32 left-0 w-full flex justify-center items-center z-20">
-                <button id="main-scan-btn" onclick="triggerARScan()" class="w-20 h-20 bg-white/90 backdrop-blur-sm rounded-full border-[6px] border-white/30 flex items-center justify-center shadow-2xl active:scale-90 transition-transform">
-                    <div class="w-14 h-14 bg-white rounded-full border-2 border-gray-200 flex items-center justify-center">
-                        <svg width="24" height="24" class="text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                    </div>
-                </button>
-            </div>
         </div>
 
         <!-- 3. INVENTORY LIST VIEW -->
@@ -428,6 +420,8 @@
 
             if (screenId === 'inventory') renderInventory();
             if (screenId === 'recipes') renderRecipes();
+            if (screenId === 'ar') triggerARScan(); // Auto-scan on entry
+            
             updateHomeCounts();
             updateARStates();
         }
@@ -453,10 +447,9 @@
 
         function triggerARScan() {
             const arScreen = document.getElementById('screen-ar');
-            const btn = document.getElementById('main-scan-btn');
             arScreen.classList.add('scanning');
-            btn.style.borderColor = 'var(--accent-sage)';
             
+            // Instantly hide and reset all bubbles for the fresh scan
             document.querySelectorAll('.ar-bubble').forEach(b => {
                 b.classList.remove('visible');
                 b.classList.remove('scanned');
@@ -467,23 +460,22 @@
 
             setTimeout(() => {
                 arScreen.classList.remove('scanning');
-                btn.style.borderColor = 'white';
                 
                 updateARStates();
 
                 document.querySelectorAll('.ar-bubble').forEach((b, i) => {
                     setTimeout(() => {
                         b.classList.add('visible');
-                        // Simulation: revealed data after identification
+                        // Reveal metadata after a short AI "thinking" delay
                         setTimeout(() => {
                             b.classList.add('scanned');
                             if (b.id === 'bubble-milk') b.classList.add('urgent');
                             if (b.id === 'bubble-eggs') b.classList.add('soon');
                             if (b.id === 'bubble-apples') b.classList.add('safe');
-                        }, 600);
+                        }, 700);
                     }, i * 200);
                 });
-            }, 1000);
+            }, 1200);
         }
 
         function updateARStates() {
