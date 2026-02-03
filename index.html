@@ -210,7 +210,7 @@
             position: absolute;
             top: 60px;
             left: 50%;
-            transform: translateX(-50%) translateY(-500px);
+            transform: translateX(-50%) translateY(-350px);
             background: #333;
             color: white;
             padding: 10px 20px;
@@ -314,8 +314,8 @@
                 <div class="w-10"></div>
             </div>
 
-            <!-- AR Bubbles -->
-            <div id="bubble-milk" class="ar-bubble" style="top: 190px; left: 15px;" onclick="addIngredient('Fresh Milk', 'Tomorrow', 'urgent', '🥛', 'bubble-milk')">
+            <!-- AR Bubbles (No recycling tips shown here) -->
+            <div id="bubble-milk" class="ar-bubble" style="top: 190px; left: 15px;" onclick="addIngredient('Fresh Milk', 'Tomorrow', 'urgent', '🥛', 'bubble-milk', 'Rinse & flatten carton')">
                 <div>
                     <div class="flex items-center gap-2">
                         <p class="text-[13px] font-bold text-gray-800">Fresh Milk</p>
@@ -326,7 +326,7 @@
                 <div class="add-icon">+</div>
             </div>
 
-            <div id="bubble-eggs" class="ar-bubble" style="top: 160px; right: 15px;" onclick="addIngredient('Eggs', 'in 3 days', 'soon', '🥚', 'bubble-eggs')">
+            <div id="bubble-eggs" class="ar-bubble" style="top: 160px; right: 15px;" onclick="addIngredient('Eggs', 'in 3 days', 'soon', '🥚', 'bubble-eggs', 'Compost paper box')">
                 <div>
                     <div class="flex items-center gap-2">
                         <p class="text-[13px] font-bold text-gray-800">Eggs</p>
@@ -337,7 +337,7 @@
                 <div class="add-icon">+</div>
             </div>
 
-            <div id="bubble-apples" class="ar-bubble" style="top: 330px; left: 100px;" onclick="addIngredient('Red Apples', 'in 12 days', 'safe', '🍎', 'bubble-apples')">
+            <div id="bubble-apples" class="ar-bubble" style="top: 330px; left: 100px;" onclick="addIngredient('Red Apples', 'in 12 days', 'safe', '🍎', 'bubble-apples', 'Compost the core')">
                 <div>
                     <div class="flex items-center gap-2">
                         <p class="text-[13px] font-bold text-gray-800">Red Apples</p>
@@ -420,7 +420,7 @@
 
             if (screenId === 'inventory') renderInventory();
             if (screenId === 'recipes') renderRecipes();
-            if (screenId === 'ar') triggerARScan(); // Auto-scan on entry
+            if (screenId === 'ar') triggerARScan(); 
             
             updateHomeCounts();
             updateARStates();
@@ -449,24 +449,16 @@
             const arScreen = document.getElementById('screen-ar');
             arScreen.classList.add('scanning');
             
-            // Instantly hide and reset all bubbles for the fresh scan
             document.querySelectorAll('.ar-bubble').forEach(b => {
-                b.classList.remove('visible');
-                b.classList.remove('scanned');
-                b.classList.remove('urgent');
-                b.classList.remove('soon');
-                b.classList.remove('safe');
+                b.classList.remove('visible', 'scanned', 'urgent', 'soon', 'safe');
             });
 
             setTimeout(() => {
                 arScreen.classList.remove('scanning');
-                
                 updateARStates();
-
                 document.querySelectorAll('.ar-bubble').forEach((b, i) => {
                     setTimeout(() => {
                         b.classList.add('visible');
-                        // Reveal metadata after a short AI "thinking" delay
                         setTimeout(() => {
                             b.classList.add('scanned');
                             if (b.id === 'bubble-milk') b.classList.add('urgent');
@@ -486,7 +478,7 @@
             });
         }
 
-        function addIngredient(name, expiryText, status, emoji, bubbleId) {
+        function addIngredient(name, expiryText, status, emoji, bubbleId, recycleTip) {
             kitchenData.push({
                 id: Date.now() + Math.random(),
                 name,
@@ -494,7 +486,8 @@
                 status,
                 emoji,
                 category: name.includes('Milk') || name.includes('Eggs') ? 'Dairy & Protein' : 'Fruits',
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                recycleTip: recycleTip || "Dispose according to local rules"
             });
 
             const bubble = document.getElementById(bubbleId);
@@ -574,6 +567,12 @@
                         <div class="flex-1">
                             <p class="text-[14px] font-bold text-gray-800">${item.name}</p>
                             <p class="text-[10px] text-gray-400 font-medium">${currentInventoryTab === 'inventory' ? item.category : 'Removed at ' + item.removedAt}</p>
+                            ${currentInventoryTab === 'history' ? `
+                                <div class="mt-1.5 flex items-center gap-1.5">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-green-500"><path d="M7 11L12 6L17 11M7 18L12 13L17 18"/></svg>
+                                    <span class="text-[9px] font-bold text-green-600 uppercase tracking-tight">${item.recycleTip}</span>
+                                </div>
+                            ` : ''}
                         </div>
                         <div class="text-right flex flex-col items-end gap-1">
                             <span class="text-[9px] font-extrabold ${getStatusText(item.status)} uppercase bg-opacity-10 px-2 py-1 rounded-lg">${item.status}</span>
