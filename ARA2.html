@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Fridge Interactive Prototype</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        :root {
+            --bg-main: #F5F5F0;
+            --accent-sage: #96A68C;
+            --urgent-red: #FF6B6B;
+            --soon-amber: #FFB347;
+            --safe-green: #78C2AD;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .phone-mockup {
+            width: 375px;
+            height: 812px;
+            background: var(--bg-main);
+            border: 12px solid #000;
+            border-radius: 44px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+        }
+
+        .screen {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .screen.active { display: flex; }
+
+        /* AR View Styles */
+        .camera-feed {
+            position: absolute;
+            inset: 0;
+            background: #E8E8E2;
+            z-index: 1;
+        }
+
+        .fridge-shelf {
+            position: absolute;
+            width: 100%;
+            height: 4px;
+            background: rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        .ar-overlay-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            background: rgba(0,0,0,0.08);
+        }
+
+        /* AR Bubble Styles */
+        .ar-bubble {
+            position: absolute;
+            background: white;
+            padding: 12px 14px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            border-left: 5px solid #ddd;
+            min-width: 160px;
+            transform: scale(0);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+            cursor: pointer;
+            z-index: 30;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .ar-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 20px;
+            width: 0; 
+            height: 0; 
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid white;
+        }
+
+        .ar-bubble.visible { transform: scale(1); }
+        .ar-bubble.scanned { border-left-width: 5px; }
+        .ar-bubble.urgent { border-left-color: var(--urgent-red); }
+        .ar-bubble.soon { border-left-color: var(--soon-amber); }
+        .ar-bubble.safe { border-left-color: var(--safe-green); }
+
+        .ar-bubble .expiry-info { display: none; }
+        .ar-bubble.scanned .expiry-info { display: block; }
+
+        .ar-bubble .add-icon {
+            width: 24px;
+            height: 24px;
+            background: #f0f0f0;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .ar-bubble .tracked-badge {
+            font-size: 8px;
+            font-weight: 800;
+            color: var(--accent-sage);
+            background: #f0f4f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            display: none;
+        }
+
+        .ar-bubble.is-tracked .tracked-badge { display: block; }
+
+        /* Nav Bar */
+        .bottom-nav {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 85px;
+            background: white;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding-bottom: 15px;
+            border-top: 1px solid #eee;
+            z-index: 100;
+        }
+
+        .nav-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: #bbb;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: color 0.3s;
+            width: 25%;
+        }
+
+        .nav-btn.active { color: var(--accent-sage); }
+        .nav-icon { width: 22px; height: 22px; margin-bottom: 2px; }
+
+        /* Scanning Animation */
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: var(--accent-sage);
+            top: 20%;
+            opacity: 0;
+            z-index: 10;
+        }
+        .scanning .scan-line {
+            animation: moveLine 2s infinite ease-in-out;
+            opacity: 1;
+        }
+        @keyframes moveLine { 0% { top: 20%; } 50% { top: 80%; } 100% { top: 20%; } }
+
+        /* Edit Modal */
+        .modal-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            display: none;
+            justify-content: center;
+            align-items: flex-end;
+        }
+        .modal-overlay.active { display: flex; }
+        .edit-panel {
+            background: white;
+            width: 100%;
+            border-radius: 32px 32px 0 0;
+            padding: 32px 24px;
+            transform: translateY(100%);
+            transition: transform 0.3s ease-out;
+        }
+        .modal-overlay.active .edit-panel { transform: translateY(0); }
+
+        /* Toast - High Offset */
+        #toast {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-500px);
+            background: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 13px;
+            font-weight: 500;
+            z-index: 300;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); }
+
+        .hide-scroll::-webkit-scrollbar { display: none; }
+
+        .recipe-card {
+            background: white;
+            border-radius: 28px;
+            padding: 16px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            border: 1px solid rgba(0,0,0,0.03);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="phone-mockup">
+        <div id="toast">Item added to kitchen!</div>
+
+        <!-- Edit Expiry Modal -->
+        <div id="edit-modal" class="modal-overlay" onclick="closeEditModal(event)">
+            <div class="edit-panel" onclick="event.stopPropagation()">
+                <h3 id="edit-item-name" class="text-xl font-bold text-gray-800 mb-2">Adjust Expiry</h3>
+                <p class="text-gray-400 text-xs mb-6">Select a preset duration for this item</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="updateExpiry(1, 'Tomorrow', 'urgent')" class="p-4 rounded-2xl border border-red-100 bg-red-50 text-red-600 font-bold text-sm text-left">
+                        1 Day<br><span class="text-[10px] font-medium opacity-70">Urgent</span>
+                    </button>
+                    <button onclick="updateExpiry(3, 'in 3 days', 'soon')" class="p-4 rounded-2xl border border-amber-100 bg-amber-50 text-amber-600 font-bold text-sm text-left">
+                        3 Days<br><span class="text-[10px] font-medium opacity-70">Leftovers</span>
+                    </button>
+                    <button onclick="updateExpiry(7, 'in 7 days', 'safe')" class="p-4 rounded-2xl border border-green-100 bg-green-50 text-green-600 font-bold text-sm text-left">
+                        7 Days<br><span class="text-[10px] font-medium opacity-70">Dairy</span>
+                    </button>
+                    <button onclick="updateExpiry(14, 'in 14 days', 'safe')" class="p-4 rounded-2xl border border-blue-100 bg-blue-50 text-blue-600 font-bold text-sm text-left">
+                        14 Days<br><span class="text-[10px] font-medium opacity-70">Produce</span>
+                    </button>
+                </div>
+                <button onclick="closeEditModal()" class="w-full mt-6 py-4 rounded-2xl bg-gray-100 text-gray-500 font-bold text-sm">Cancel</button>
+            </div>
+        </div>
+
+        <!-- 1. HOME DASHBOARD -->
+        <div id="screen-home" class="screen active p-8">
+            <div class="mt-12">
+                <h1 class="text-3xl font-bold text-[#333]">Good morning</h1>
+            </div>
+
+            <div class="flex-1 flex flex-col justify-center items-center">
+                <button onclick="showScreen('ar')" class="relative group">
+                    <div class="w-44 h-44 rounded-full bg-[#96A68C] opacity-20 absolute inset-0 animate-pulse scale-110"></div>
+                    <div class="w-44 h-44 rounded-full bg-[#96A68C] flex flex-col items-center justify-center relative shadow-2xl active:scale-95 transition-transform">
+                        <svg class="w-10 h-10 text-white mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                        </svg>
+                        <span class="text-white font-bold text-lg">Open Fridge</span>
+                    </div>
+                </button>
+            </div>
+
+            <div class="flex gap-4 mb-24">
+                <div class="bg-white p-5 rounded-[28px] flex-1 shadow-sm border border-gray-100">
+                    <p id="home-total" class="text-3xl font-bold text-[#96A68C]">0</p>
+                    <p class="text-[10px] text-gray-400 uppercase font-bold tracking-wider mt-1">Stored</p>
+                </div>
+                <div class="bg-white p-5 rounded-[28px] flex-1 shadow-sm border border-gray-100">
+                    <p id="home-urgent" class="text-3xl font-bold text-red-400">0</p>
+                    <p class="text-[10px] text-gray-400 uppercase font-bold tracking-wider mt-1">Urgent</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. AR SCAN VIEW -->
+        <div id="screen-ar" class="screen">
+            <div class="camera-feed">
+                <div class="fridge-shelf" style="top: 340px;"></div>
+                <div class="fridge-shelf" style="top: 480px;"></div>
+                <div class="absolute text-7xl" style="top: 275px; left: 35px; filter: drop-shadow(0 8px 8px rgba(0,0,0,0.05));">🥛</div>
+                <div class="absolute text-7xl" style="top: 255px; right: 35px; filter: drop-shadow(0 8px 8px rgba(0,0,0,0.05));">🥚</div>
+                <div class="absolute text-7xl" style="top: 410px; left: 120px; filter: drop-shadow(0 8px 8px rgba(0,0,0,0.05));">🍎</div>
+            </div>
+            
+            <div class="ar-overlay-layer"></div>
+            <div class="scan-line"></div>
+
+            <div class="absolute top-14 left-0 w-full px-6 flex justify-between items-center z-20">
+                <button onclick="showScreen('home')" class="w-10 h-10 bg-black/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                </button>
+                <div class="w-10"></div>
+            </div>
+
+            <!-- AR Bubbles -->
+            <div id="bubble-milk" class="ar-bubble" style="top: 190px; left: 15px;" onclick="addIngredient('Fresh Milk', 'Tomorrow', 'urgent', '🥛', 'bubble-milk')">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <p class="text-[13px] font-bold text-gray-800">Fresh Milk</p>
+                        <span class="tracked-badge">Tracked</span>
+                    </div>
+                    <p class="expiry-info text-[10px] text-gray-500 font-medium">Expires <span class="text-red-500">Tomorrow</span></p>
+                </div>
+                <div class="add-icon">+</div>
+            </div>
+
+            <div id="bubble-eggs" class="ar-bubble" style="top: 160px; right: 15px;" onclick="addIngredient('Eggs', 'in 3 days', 'soon', '🥚', 'bubble-eggs')">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <p class="text-[13px] font-bold text-gray-800">Eggs</p>
+                        <span class="tracked-badge">Tracked</span>
+                    </div>
+                    <p class="expiry-info text-[10px] text-gray-500 font-medium">Expires <span class="text-amber-500">in 3 days</span></p>
+                </div>
+                <div class="add-icon">+</div>
+            </div>
+
+            <div id="bubble-apples" class="ar-bubble" style="top: 330px; left: 100px;" onclick="addIngredient('Red Apples', 'in 12 days', 'safe', '🍎', 'bubble-apples')">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <p class="text-[13px] font-bold text-gray-800">Red Apples</p>
+                        <span class="tracked-badge">Tracked</span>
+                    </div>
+                    <p class="expiry-info text-[10px] text-gray-500 font-medium">Expires <span class="text-green-500">in 12 days</span></p>
+                </div>
+                <div class="add-icon">+</div>
+            </div>
+
+            <div class="absolute bottom-32 left-0 w-full flex justify-center items-center z-20">
+                <button id="main-scan-btn" onclick="triggerARScan()" class="w-20 h-20 bg-white/90 backdrop-blur-sm rounded-full border-[6px] border-white/30 flex items-center justify-center shadow-2xl active:scale-90 transition-transform">
+                    <div class="w-14 h-14 bg-white rounded-full border-2 border-gray-200 flex items-center justify-center">
+                        <svg width="24" height="24" class="text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. INVENTORY LIST VIEW -->
+        <div id="screen-inventory" class="screen p-8">
+            <h1 class="text-2xl font-bold text-[#333] mt-10">My Kitchen</h1>
+            <div class="flex gap-2 overflow-x-auto hide-scroll mt-6 mb-2">
+                <button id="btn-tab-inventory" onclick="setInventoryTab('inventory')" class="bg-[#96A68C] text-white px-5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors">Inventory</button>
+                <button id="btn-tab-history" onclick="setInventoryTab('history')" class="bg-white text-gray-400 px-5 py-2 rounded-full text-xs font-semibold whitespace-nowrap border border-gray-100 transition-colors">History</button>
+            </div>
+            <div class="flex-1 overflow-y-auto mt-4 pb-24 hide-scroll">
+                <div id="empty-state" class="text-center py-20 opacity-40">
+                    <p class="text-sm font-medium">No items tracked yet.</p>
+                    <p class="text-[11px] mt-1">Scan fridge to add items.</p>
+                </div>
+                <div id="inventory-list" class="space-y-3"></div>
+            </div>
+        </div>
+
+        <!-- 4. RECIPE SUGGESTIONS VIEW -->
+        <div id="screen-recipes" class="screen p-8">
+            <h1 class="text-2xl font-bold text-[#333] mt-10">Cook This Next</h1>
+            <p class="text-gray-400 text-xs mt-1">Using ingredients you already have</p>
+            <div class="flex-1 overflow-y-auto mt-8 pb-24 hide-scroll">
+                <div id="recipe-empty-state" class="text-center py-20 opacity-40">
+                    <p class="text-sm font-medium">Add ingredients to see suggestions.</p>
+                </div>
+                <div id="recipe-list" class="space-y-4"></div>
+            </div>
+        </div>
+
+        <!-- SHARED NAVIGATION -->
+        <div class="bottom-nav">
+            <div class="nav-btn active" onclick="showScreen('home')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                <span>Home</span>
+            </div>
+            <div class="nav-btn" onclick="showScreen('ar')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
+                <span>AR Scan</span>
+            </div>
+            <div class="nav-btn" onclick="showScreen('inventory')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                <span>Fridge</span>
+            </div>
+            <div class="nav-btn" onclick="showScreen('recipes')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.691.34a6 6 0 01-3.86.517l-2.387-.477a2 2 0 00-1.022.547l-1.162 1.162a2 2 0 00.442 3.238l.97.485a2 2 0 011.132 2.028l-.156 1.404a2 2 0 002.346 2.19l1.464-.244a2 2 0 011.032 0l1.464.244a2 2 0 002.346-2.19l-.156-1.404a2 2 0 011.132-2.028l.97-.485a2 2 0 00.442-3.238l-1.162-1.162zM12 7V4m0 0a1 1 0 100-2 1 1 0 000 2zm6.364 1.364l2.122-2.122m-2.122 2.122a1 1 0 111.414 1.414 1 1 0 01-1.414-1.414zM7.05 3.636l-2.121 2.121m2.121-2.121a1 1 0 11-1.414-1.414 1 1 0 011.414 1.414z"></path></svg>
+                <span>Recipes</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let kitchenData = [];
+        let historyData = [];
+        let currentInventoryTab = 'inventory';
+        let itemToEditId = null;
+
+        const recipes = [
+            { id: 1, name: "Fluffy Pancakes", items: ["Fresh Milk", "Eggs"], time: "15 min", img: "🥞" },
+            { id: 2, name: "Apple Yogurt Parfait", items: ["Red Apples", "Greek Yogurt"], time: "5 min", img: "🥣" },
+            { id: 3, name: "Morning Omelette", items: ["Eggs"], time: "10 min", img: "🍳" }
+        ];
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(`screen-${screenId}`).classList.add('active');
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            const map = { home: 0, ar: 1, inventory: 2, recipes: 3 };
+            document.querySelectorAll('.nav-btn')[map[screenId]].classList.add('active');
+
+            if (screenId === 'inventory') renderInventory();
+            if (screenId === 'recipes') renderRecipes();
+            updateHomeCounts();
+            updateARStates();
+        }
+
+        function setInventoryTab(tabId) {
+            currentInventoryTab = tabId;
+            const btnInv = document.getElementById('btn-tab-inventory');
+            const btnHis = document.getElementById('btn-tab-history');
+
+            if (tabId === 'inventory') {
+                btnInv.classList.replace('bg-white', 'bg-[#96A68C]');
+                btnInv.classList.replace('text-gray-400', 'text-white');
+                btnHis.classList.replace('bg-[#96A68C]', 'bg-white');
+                btnHis.classList.replace('text-white', 'text-gray-400');
+            } else {
+                btnHis.classList.replace('bg-white', 'bg-[#96A68C]');
+                btnHis.classList.replace('text-gray-400', 'text-white');
+                btnInv.classList.replace('bg-[#96A68C]', 'bg-white');
+                btnInv.classList.replace('text-white', 'text-gray-400');
+            }
+            renderInventory();
+        }
+
+        function triggerARScan() {
+            const arScreen = document.getElementById('screen-ar');
+            const btn = document.getElementById('main-scan-btn');
+            arScreen.classList.add('scanning');
+            btn.style.borderColor = 'var(--accent-sage)';
+            
+            document.querySelectorAll('.ar-bubble').forEach(b => {
+                b.classList.remove('visible');
+                b.classList.remove('scanned');
+                b.classList.remove('urgent');
+                b.classList.remove('soon');
+                b.classList.remove('safe');
+            });
+
+            setTimeout(() => {
+                arScreen.classList.remove('scanning');
+                btn.style.borderColor = 'white';
+                
+                updateARStates();
+
+                document.querySelectorAll('.ar-bubble').forEach((b, i) => {
+                    setTimeout(() => {
+                        b.classList.add('visible');
+                        // Simulation: revealed data after identification
+                        setTimeout(() => {
+                            b.classList.add('scanned');
+                            if (b.id === 'bubble-milk') b.classList.add('urgent');
+                            if (b.id === 'bubble-eggs') b.classList.add('soon');
+                            if (b.id === 'bubble-apples') b.classList.add('safe');
+                        }, 600);
+                    }, i * 200);
+                });
+            }, 1000);
+        }
+
+        function updateARStates() {
+            document.querySelectorAll('.ar-bubble').forEach(bubble => {
+                const name = bubble.querySelector('p').innerText;
+                const isStored = kitchenData.some(item => item.name === name);
+                isStored ? bubble.classList.add('is-tracked') : bubble.classList.remove('is-tracked');
+            });
+        }
+
+        function addIngredient(name, expiryText, status, emoji, bubbleId) {
+            kitchenData.push({
+                id: Date.now() + Math.random(),
+                name,
+                expiry: expiryText,
+                status,
+                emoji,
+                category: name.includes('Milk') || name.includes('Eggs') ? 'Dairy & Protein' : 'Fruits',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+
+            const bubble = document.getElementById(bubbleId);
+            if (bubble) bubble.classList.add('is-tracked');
+
+            const toast = document.getElementById('toast');
+            toast.innerText = `${name} Added to Fridge`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+            
+            updateHomeCounts();
+        }
+
+        function removeIngredient(id) {
+            const itemToRemove = kitchenData.find(item => item.id === id);
+            if (itemToRemove) {
+                historyData.unshift({
+                    ...itemToRemove,
+                    removedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+            }
+            kitchenData = kitchenData.filter(item => item.id !== id);
+            renderInventory();
+            updateHomeCounts();
+            updateARStates();
+        }
+
+        function openEditModal(id) {
+            itemToEditId = id;
+            const item = kitchenData.find(i => i.id === id);
+            document.getElementById('edit-item-name').innerText = `Adjust ${item.name}`;
+            document.getElementById('edit-modal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.remove('active');
+            itemToEditId = null;
+        }
+
+        function updateExpiry(days, label, status) {
+            const item = kitchenData.find(i => i.id === itemToEditId);
+            if (item) {
+                item.expiry = label;
+                item.status = status;
+            }
+            closeEditModal();
+            renderInventory();
+            updateHomeCounts();
+        }
+
+        function updateHomeCounts() {
+            const totalEl = document.getElementById('home-total');
+            const urgentEl = document.getElementById('home-urgent');
+            if (totalEl) totalEl.innerText = kitchenData.length;
+            if (urgentEl) {
+                const urgentCount = kitchenData.filter(i => i.status === 'urgent').length;
+                urgentEl.innerText = urgentCount;
+            }
+        }
+
+        function renderInventory() {
+            const list = document.getElementById('inventory-list');
+            const empty = document.getElementById('empty-state');
+            if (!list || !empty) return;
+
+            const targetData = currentInventoryTab === 'inventory' ? kitchenData : historyData;
+
+            if (targetData.length === 0) {
+                empty.style.display = 'block';
+                empty.querySelector('p').innerText = currentInventoryTab === 'inventory' ? 'No items tracked yet.' : 'No history found.';
+                list.innerHTML = '';
+            } else {
+                empty.style.display = 'none';
+                list.innerHTML = targetData.map(item => `
+                    <div class="inventory-item bg-white p-4 rounded-[24px] flex items-center gap-4 shadow-sm border border-gray-50 animate-in fade-in slide-in-from-bottom-2">
+                        <div class="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-xl shadow-inner">${item.emoji}</div>
+                        <div class="flex-1">
+                            <p class="text-[14px] font-bold text-gray-800">${item.name}</p>
+                            <p class="text-[10px] text-gray-400 font-medium">${currentInventoryTab === 'inventory' ? item.category : 'Removed at ' + item.removedAt}</p>
+                        </div>
+                        <div class="text-right flex flex-col items-end gap-1">
+                            <span class="text-[9px] font-extrabold ${getStatusText(item.status)} uppercase bg-opacity-10 px-2 py-1 rounded-lg">${item.status}</span>
+                            <div class="flex gap-2 mt-1">
+                                ${currentInventoryTab === 'inventory' 
+                                    ? `<button onclick="openEditModal(${item.id})" class="text-[10px] text-sage-600 font-bold hover:opacity-70">Edit Date</button>
+                                       <button onclick="removeIngredient(${item.id})" class="text-[10px] text-gray-300 hover:text-red-400">Untrack</button>` 
+                                    : `<span class="text-[10px] text-gray-300 italic">History</span>`}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function renderRecipes() {
+            const list = document.getElementById('recipe-list');
+            const empty = document.getElementById('recipe-empty-state');
+            if (!list || !empty) return;
+            
+            const availableRecipes = recipes.filter(r => 
+                r.items.some(needed => kitchenData.some(owned => owned.name === needed))
+            );
+
+            if (availableRecipes.length === 0) {
+                empty.style.display = 'block';
+                list.innerHTML = '';
+            } else {
+                empty.style.display = 'none';
+                list.innerHTML = availableRecipes.map(r => {
+                    const matchedItems = r.items.filter(needed => kitchenData.some(owned => owned.name === needed));
+                    const isUrgent = kitchenData.some(owned => matchedItems.includes(owned.name) && owned.status === 'urgent');
+                    return `
+                        <div class="recipe-card animate-in fade-in slide-in-from-bottom-3">
+                            <div class="w-16 h-16 bg-[#F0F2F5] rounded-2xl flex items-center justify-center text-3xl">${r.img}</div>
+                            <div class="flex-1">
+                                <div class="flex justify-between items-start">
+                                    <p class="text-sm font-bold text-gray-800">${r.name}</p>
+                                    ${isUrgent ? '<span class="text-[8px] bg-red-100 text-red-500 px-1.5 py-0.5 rounded font-black uppercase">Urgent Ingredients</span>' : ''}
+                                </div>
+                                <p class="text-[10px] text-gray-400 mt-1">Stored: ${matchedItems.length}/${r.items.length}</p>
+                                <div class="flex items-center justify-between mt-2">
+                                    <span class="text-[10px] text-[#96A68C] font-bold">${r.time}</span>
+                                    <button class="text-[10px] font-bold text-gray-400">View Recipe →</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        function getStatusText(status) {
+            if (status === 'urgent') return 'text-red-400 bg-red-400';
+            if (status === 'soon') return 'text-amber-400 bg-amber-400';
+            return 'text-green-400 bg-green-400';
+        }
+    </script>
+</body>
+</html>
